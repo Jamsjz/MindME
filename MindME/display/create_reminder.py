@@ -13,3 +13,4 @@ def create_reminder(user_id):
         if isinstance(due_date, date):
             add_reminder(title, description, due_date, due_time, user_id)
             st.success("Reminder created successfully.")
+            st.rerun()
