@@ -1,7 +1,7 @@
 import smtplib
 import schedule
-import time
-from datetime import datetime
+import time as time_module
+from datetime import datetime, date, time
 from flask import Flask
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -51,22 +51,26 @@ def send_email(to_email, subject, body):
 def check_reminders():
     current_time = datetime.now(pytz.utc)
     reminders = session.query(Reminder).all()
+    print(f"Checking {len(reminders)} reminders")
 
     for reminder in reminders:
-        reminder_time = datetime.combine(reminder.due_date, reminder.due_time).replace(
-            tzinfo=pytz.utc
-        )
-        if reminder_time <= current_time:
-            user = session.query(User).filter_by(id=reminder.user_id).first()
-            if user:
-                email_subject = "Reminder: " + reminder.title
-                email_body = f"Description: {reminder.description}\nDue Date: {reminder.due_date} {reminder.due_time}"
-                send_email(user.email, email_subject, email_body)
-                session.delete(reminder)
-                session.commit()
-                print(
-                    f"Sent reminder email to {user.email} and deleted reminder with ID {reminder.id}"
-                )
+        if isinstance(reminder.due_time, time) and isinstance(reminder.due_date, date):
+            reminder_time = datetime.combine(
+                reminder.due_date, reminder.due_time
+            ).replace(tzinfo=pytz.utc)
+            if reminder_time >= current_time:
+                user = session.get(User, reminder.user_id)
+                if user:
+                    email_subject = "Reminder: " + reminder.title
+                    email_body = f"Description: \n {reminder.description}\nDue Date: {reminder.due_date} {reminder.due_time}"
+                    send_email(user.email, email_subject, email_body)
+                    session.delete(reminder)
+                    session.commit()
+                    print(
+                        f"Sent reminder email to {user.email} and deleted reminder with ID {reminder.id}"
+                    )
+        else:
+            print(f"Reminder with ID {reminder.id} has invalid due time or date")
 
 
 @app.route("/")
@@ -79,7 +83,7 @@ def run_scheduler():
 
     while True:
         schedule.run_pending()
-        time.sleep(1)
+        time_module.sleep(1)
 
 
 if __name__ == "__main__":
