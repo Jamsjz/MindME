@@ -1,4 +1,14 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Time, Date, Table
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    ForeignKey,
+    Time,
+    Date,
+    Boolean,
+    Table,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import datetime
@@ -52,6 +62,7 @@ class Reminder(Base):
         Time, default=datetime.datetime.now(datetime.UTC), nullable=False
     )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    processed = Column(Boolean, default=False, nullable=False)  # New column
 
     # Define the relationship to User
     user = relationship("User", back_populates="reminders")
@@ -87,8 +98,8 @@ class AdminReminder(Base):
         Time, default=datetime.datetime.now(datetime.UTC), nullable=False
     )
     admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False)
-
     reminder_id = Column(Integer, ForeignKey("reminders.id"))
+    processed = Column(Boolean, default=False, nullable=False)  # New column
 
     # Define the relationship to Admin
     admin = relationship("Admin", back_populates="admin_reminders")
@@ -112,6 +123,7 @@ class AdminTask(Base):
         Time, default=datetime.datetime.now(datetime.UTC), nullable=False
     )
     admin_id = Column(Integer, ForeignKey("admins.id"), nullable=False)
+    processed = Column(Boolean, default=False, nullable=False)  # New column
 
     # Define the many-to-many relationship to User
     users = relationship(
