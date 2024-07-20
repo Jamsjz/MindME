@@ -1,13 +1,13 @@
 import smtplib
 import schedule
 import time as time_module
-from datetime import datetime, date, time
+from datetime import datetime
 from flask import Flask
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from database.models import Reminder, User, Admin, AdminTask
+from database.models import Reminder, User, Admin, AdminTask, AdminReminder
 import json
 import pytz
 
@@ -49,79 +49,65 @@ def send_email(to_email, subject, body):
 
 
 def check_reminders():
-    current_time = datetime.now(pytz.utc)
-    reminders = session.query(Reminder).all()
+    reminders = session.query(Reminder).filter(Reminder.processed == False).all()
+    print("got reminders")
+    admin_reminders = (
+        session.query(AdminReminder).filter(AdminReminder.processed == False).all()
+    )
+    print("got admin reminders")
     print(f"Checking {len(reminders)} reminders")
+    users = session.query(User).all()
 
     for reminder in reminders:
-        if isinstance(reminder.due_time, time) and isinstance(reminder.due_date, date):
-            reminder_time = datetime.combine(
-                reminder.due_date, reminder.due_time
-            ).replace(tzinfo=pytz.utc)
-            if reminder_time >= current_time:
-                user = session.get(User, reminder.user_id)
-                if user:
-                    email_subject = f"Reminder: {reminder.title}"
-                    email_body = (
-                        f"Description: \n {reminder.description}\nDue Date: "
-                        f"{reminder.due_date} {reminder.due_time}"
-                    )
-                    send_email(user.email, email_subject, email_body)
-                    print(
-                        f"Sent reminder email to {user.email} and deleted reminder with ID {reminder.id}"
-                    )
-                admin_reminders = reminder.admin_reminders
-                for admin_reminder in admin_reminders:
-                    admin = session.get(Admin, admin_reminder.admin_id)
-                    if admin:
-                        email_subject = f"Reminder: {reminder.title}"
-                        email_body = (
-                            f"Description: \n {reminder.description}\nDue Date: "
-                            f"{reminder.due_date} {reminder.due_time}"
-                        )
-                        send_email(admin.email, email_subject, email_body)
-                        print(
-                            f"Sent reminder email to admin {admin.email} for reminder ID {reminder.id}"
-                        )
-                session.delete(reminder)
-                session.commit()
+        for user in users:
+            email_subject = f"Reminder: {reminder.title}"
+            email_body = (
+                f"Description: \n {reminder.description}\nDue Date: "
+                f"{reminder.due_date} {reminder.due_time}"
+            )
+            send_email(user.email, email_subject, email_body)
+            print(f"Sent reminder email to {user.email} for reminder ID {reminder.id}")
+            reminder.processed = True
+            print("processed")
+            session.commit()
+            print("committed")
+
+    for admin_reminder in admin_reminders:
+        admin = session.get(Admin, admin_reminder.admin_id)
+        if admin:
+            email_subject = f"Reminder: {admin_reminder.title}"
+            email_body = (
+                f"Description: \n {admin_reminder.description}\nDue Date: "
+                f"{admin_reminder.due_date} {admin_reminder.due_time}"
+            )
+            send_email(admin.email, email_subject, email_body)
+            print(
+                f"Sent reminder email to admin {admin.email} for reminder ID {admin_reminder.id}"
+            )
+            admin_reminder.processed = True
+            session.commit()
         else:
-            print(f"Reminder with ID {reminder.id} has invalid due time or date")
+            print(f"Reminder with ID {admin_reminder.id} has invalid due time or date")
 
 
 def check_tasks():
     current_time = datetime.now(pytz.utc)
-    tasks = session.query(AdminTask).all()
+    tasks = session.query(AdminTask).filter(AdminTask.processed == False).all()
     print(f"Checking {len(tasks)} tasks")
 
     for task in tasks:
-        if isinstance(task.due_time, time) and isinstance(task.due_date, date):
-            task_time = datetime.combine(task.due_date, task.due_time).replace(
-                tzinfo=pytz.utc
+        print("checked")
+        for user in task.users:
+            email_subject = f"Task: {task.title}"
+            email_body = (
+                f"Description: \n {task.description}\nDue Date: "
+                f"{task.due_date} {task.due_time}"
             )
-            if task_time >= current_time:
-                admin = session.get(Admin, task.admin_id)
-                if admin:
-                    email_subject = f"Task: {task.title}"
-                    email_body = (
-                        f"Description: \n {task.description}\nDue Date: "
-                        f"{task.due_date} {task.due_time}"
-                    )
-                    send_email(admin.email, email_subject, email_body)
-                    print(
-                        f"Sent task email to admin {admin.email} for task ID {task.id}"
-                    )
-                users = task.users
-                for user in users:
-                    email_subject = f"Task: {task.title}"
-                    email_body = (
-                        f"Description: \n {task.description}\nDue Date: "
-                        f"{task.due_date} {task.due_time}"
-                    )
-                    send_email(user.email, email_subject, email_body)
-                    print(f"Sent task email to user {user.email} for task ID {task.id}")
-        else:
-            print(f"Task with ID {task.id} has invalid due time or date")
+            send_email(user.email, email_subject, email_body)
+            print(f"Sent task email to user {user.email} for task ID {task.id}")
+
+        task.processed = True
+        session.commit()
 
 
 @app.route("/")
