@@ -7,7 +7,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from database.models import Reminder, User
+from database.models import Reminder, User, Admin, AdminTask
 import json
 import pytz
 
@@ -61,16 +61,67 @@ def check_reminders():
             if reminder_time >= current_time:
                 user = session.get(User, reminder.user_id)
                 if user:
-                    email_subject = "Reminder: " + reminder.title
-                    email_body = f"Description: \n {reminder.description}\nDue Date: {reminder.due_date} {reminder.due_time}"
+                    email_subject = f"Reminder: {reminder.title}"
+                    email_body = (
+                        f"Description: \n {reminder.description}\nDue Date: "
+                        f"{reminder.due_date} {reminder.due_time}"
+                    )
                     send_email(user.email, email_subject, email_body)
-                    session.delete(reminder)
-                    session.commit()
                     print(
                         f"Sent reminder email to {user.email} and deleted reminder with ID {reminder.id}"
                     )
+                admin_reminders = reminder.admin_reminders
+                for admin_reminder in admin_reminders:
+                    admin = session.get(Admin, admin_reminder.admin_id)
+                    if admin:
+                        email_subject = f"Reminder: {reminder.title}"
+                        email_body = (
+                            f"Description: \n {reminder.description}\nDue Date: "
+                            f"{reminder.due_date} {reminder.due_time}"
+                        )
+                        send_email(admin.email, email_subject, email_body)
+                        print(
+                            f"Sent reminder email to admin {admin.email} for reminder ID {reminder.id}"
+                        )
+                session.delete(reminder)
+                session.commit()
         else:
             print(f"Reminder with ID {reminder.id} has invalid due time or date")
+
+
+def check_tasks():
+    current_time = datetime.now(pytz.utc)
+    tasks = session.query(AdminTask).all()
+    print(f"Checking {len(tasks)} tasks")
+
+    for task in tasks:
+        if isinstance(task.due_time, time) and isinstance(task.due_date, date):
+            task_time = datetime.combine(task.due_date, task.due_time).replace(
+                tzinfo=pytz.utc
+            )
+            if task_time >= current_time:
+                admin = session.get(Admin, task.admin_id)
+                if admin:
+                    email_subject = f"Task: {task.title}"
+                    email_body = (
+                        f"Description: \n {task.description}\nDue Date: "
+                        f"{task.due_date} {task.due_time}"
+                    )
+                    send_email(admin.email, email_subject, email_body)
+                    print(
+                        f"Sent task email to admin {admin.email} for task ID {task.id}"
+                    )
+                users = task.users
+                for user in users:
+                    email_subject = f"Task: {task.title}"
+                    email_body = (
+                        f"Description: \n {task.description}\nDue Date: "
+                        f"{task.due_date} {task.due_time}"
+                    )
+                    send_email(user.email, email_subject, email_body)
+                    print(f"Sent task email to user {user.email} for task ID {task.id}")
+        else:
+            print(f"Task with ID {task.id} has invalid due time or date")
 
 
 @app.route("/")
@@ -80,6 +131,7 @@ def index():
 
 def run_scheduler():
     schedule.every(1).minutes.do(check_reminders)
+    schedule.every(1).minutes.do(check_tasks)
 
     while True:
         schedule.run_pending()
